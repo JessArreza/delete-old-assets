@@ -6,9 +6,6 @@ inputs:
     description: "Number of latest assets to keep."
     required: true
     default: "1"
-  GITHUB_TOKEN:
-    description: "GitHub token used for authentication."
-    required: true
 
 runs:
   using: "composite"
@@ -41,8 +38,6 @@ runs:
             }
         }
         Write-Host "Release cleanup completed."
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Wait for tag deletion to propagate
       shell: bash
@@ -75,8 +70,6 @@ runs:
             }
         }
         Write-Host "Tag cleanup completed."
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Delete Workflow Runs
       shell: pwsh
@@ -105,5 +98,3 @@ runs:
             }
             Write-Host "Workflow cleanup completed. Only the current run is preserved."
         }
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
