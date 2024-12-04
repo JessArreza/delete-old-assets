@@ -17,12 +17,12 @@ runs:
   steps:
     - name: Delete Old Releases
       shell: pwsh
-      run: ./delete-old-releases.ps1 ${{ inputs.keep_latest }}
+      run: powershell -File ./delete-old-releases.ps1 ${{ inputs.keep_latest }}
 
     - name: Delete Old Tags
       shell: pwsh
-      run: ./delete-old-tags.ps1 ${{ inputs.keep_latest }}
+      run: powershell -File ./delete-old-tags.ps1 ${{ inputs.keep_latest }}
 
     - name: Delete Old Workflows
       shell: pwsh
-      run: ./delete-old-workflows.ps1
+      run: powershell -File ./delete-old-workflows.ps1
