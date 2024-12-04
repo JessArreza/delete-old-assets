@@ -1,4 +1,4 @@
-name: "Delete Old GitHub Assets"
+name: Delete Old GitHub Assets
 description: "Deletes old releases, tags, and workflow runs, keeping the latest release."
 
 inputs:
@@ -6,11 +6,9 @@ inputs:
     description: "Number of latest assets to keep."
     required: true
     default: "1"
-
-outputs:
-  success:
-    description: "Indicates if the cleanup was successful."
-    value: "true"
+  GITHUB_TOKEN:
+    description: "GitHub token used for authentication."
+    required: true
 
 runs:
   using: "composite"
@@ -20,7 +18,7 @@ runs:
       run: |
         Write-Host "Starting releases cleanup..."
         Write-Host "Fetching all releases..."
-        $currentReleaseTag = "${{github.run_number}}"
+        $currentReleaseTag = "${{ github.run_number }}"
         Write-Host "Current release tag: $currentReleaseTag"
         $releases = gh api repos/${{ github.repository }}/releases --paginate -q '.[] | [.id, .tag_name] | @tsv'
         
@@ -44,7 +42,7 @@ runs:
         }
         Write-Host "Release cleanup completed."
       env:
-        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Wait for tag deletion to propagate
       shell: bash
@@ -55,7 +53,7 @@ runs:
       run: |
         Write-Host "Starting tags cleanup..."
         Write-Host "Fetching all tags..."
-        $currentReleaseTag = "${{github.run_number}}"
+        $currentReleaseTag = "${{ github.run_number }}"
         $tags = gh api repos/${{ github.repository }}/git/refs/tags --paginate -q '.[] | select(.ref | startswith("refs/tags/")) | .ref' `
             | ForEach-Object { $_ -replace 'refs/tags/', '' }
         if (-not $tags) {
@@ -78,7 +76,7 @@ runs:
         }
         Write-Host "Tag cleanup completed."
       env:
-        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Delete Workflow Runs
       shell: pwsh
@@ -108,4 +106,4 @@ runs:
             Write-Host "Workflow cleanup completed. Only the current run is preserved."
         }
       env:
-        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
