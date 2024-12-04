@@ -17,12 +17,95 @@ runs:
   steps:
     - name: Delete Old Releases
       shell: pwsh
-      run: powershell -File ./delete-old-releases.ps1 ${{ inputs.keep_latest }}
+      run: |
+        Write-Host "Starting releases cleanup..."
+        Write-Host "Fetching all releases..."
+        $currentReleaseTag = "${{github.run_number}}"
+        Write-Host "Current release tag: $currentReleaseTag"
+        $releases = gh api repos/${{ github.repository }}/releases --paginate -q '.[] | [.id, .tag_name] | @tsv'
+        
+        if (-not $releases) {
+            Write-Host "No releases found to delete. Skipping release cleanup."
+        } else {
+            Write-Host "Found releases. Starting deletion..."
+            $releases | ConvertFrom-Csv -Delimiter "`t" -Header "Id", "TagName" | ForEach-Object {
+                if ($_.TagName -ne $currentReleaseTag) {
+                    Write-Host "Deleting release: $($_.TagName) (ID: $($_.Id))"
+                    try {
+                        gh api repos/${{ github.repository }}/releases/$($_.Id) -X DELETE
+                        Write-Host "Successfully deleted release: $($_.TagName)"
+                    } catch {
+                        Write-Host "Failed to delete release: $($_.TagName)"
+                    }
+                } else {
+                    Write-Host "Skipping current release: $($_.TagName)"
+                }
+            }
+        }
+        Write-Host "Release cleanup completed."
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Wait for tag deletion to propagate
+      shell: bash
+      run: sleep 5
 
     - name: Delete Old Tags
       shell: pwsh
-      run: powershell -File ./delete-old-tags.ps1 ${{ inputs.keep_latest }}
+      run: |
+        Write-Host "Starting tags cleanup..."
+        Write-Host "Fetching all tags..."
+        $currentReleaseTag = "${{github.run_number}}"
+        $tags = gh api repos/${{ github.repository }}/git/refs/tags --paginate -q '.[] | select(.ref | startswith("refs/tags/")) | .ref' `
+            | ForEach-Object { $_ -replace 'refs/tags/', '' }
+        if (-not $tags) {
+            Write-Host "No tags found to delete. Skipping tag cleanup."
+        } else {
+            Write-Host "Found tags. Starting deletion..."
+            $tags | ForEach-Object {
+                if ($_ -ne $currentReleaseTag) {
+                    Write-Host "Deleting tag: $_"
+                    try {
+                        gh api repos/${{ github.repository }}/git/refs/tags/$_ -X DELETE
+                        Write-Host "Successfully deleted tag: $_"
+                    } catch {
+                        Write-Host "Warning: Failed to delete tag: $_"
+                    }
+                } else {
+                    Write-Host "Skipping current tag: $_"
+                }
+            }
+        }
+        Write-Host "Tag cleanup completed."
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-    - name: Delete Old Workflows
+    - name: Delete Workflow Runs
       shell: pwsh
-      run: powershell -File ./delete-old-workflows.ps1
+      run: |
+        Write-Host "Starting workflow runs cleanup..."
+        Write-Host "Fetching all workflow runs..."
+        $currentRunId = $env:GITHUB_RUN_ID
+        Write-Host "Current running workflow ID: $currentRunId"
+        $workflowRuns = gh api repos/${{ github.repository }}/actions/runs --paginate -q '.workflow_runs[] | select(.id) | .id'
+        if (-not $workflowRuns) {
+            Write-Host "No workflow runs found to delete. Skipping workflow cleanup."
+        } else {
+            Write-Host "Found workflow runs. Starting deletion..."
+            $workflowRuns | ForEach-Object {
+                if ($_ -ne $currentRunId) {
+                    Write-Host "Deleting workflow run ID: $_"
+                    try {
+                        gh api repos/${{ github.repository }}/actions/runs/$_ -X DELETE
+                        Write-Host "Successfully deleted workflow run: $_"
+                    } catch {
+                        Write-Host "Failed to delete workflow run: $_"
+                    }
+                } else {
+                    Write-Host "Skipping current workflow run: $_"
+                }
+            }
+            Write-Host "Workflow cleanup completed. Only the current run is preserved."
+        }
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
