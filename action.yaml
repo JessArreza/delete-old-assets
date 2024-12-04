@@ -1,0 +1,28 @@
+name: "Delete Old GitHub Assets"
+description: "Deletes old releases, tags, and workflow runs, keeping the latest release."
+
+inputs:
+  keep_latest:
+    description: "Number of latest assets to keep."
+    required: true
+    default: "1"
+
+outputs:
+  success:
+    description: "Indicates if the cleanup was successful."
+    value: "true"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Delete Old Releases
+      shell: pwsh
+      run: ./delete-old-releases.ps1 ${{ inputs.keep_latest }}
+
+    - name: Delete Old Tags
+      shell: pwsh
+      run: ./delete-old-tags.ps1 ${{ inputs.keep_latest }}
+
+    - name: Delete Old Workflows
+      shell: pwsh
+      run: ./delete-old-workflows.ps1
