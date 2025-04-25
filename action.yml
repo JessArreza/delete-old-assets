@@ -50,35 +50,42 @@ runs:
         Write-Host "Fetching all tags..."
         $currentReleaseTag = "${{ github.run_number }}"
         
-        # Improved tag fetching with proper error handling
-        try {
-            $tags = gh api repos/${{ github.repository }}/git/refs/tags --paginate -q '.[].ref | startswith("refs/tags/") | .ref' | 
-            ForEach-Object { $_ -replace 'refs/tags/', '' }
-            
-            # Check if $tags is null, empty or whitespace
-            if (-not $tags -or @($tags).Count -eq 0) {
-            Write-Host "No tags found to delete. Skipping tag cleanup."
+        # Execute the gh command and capture its output and exit code
+        $output = gh api repos/${{ github.repository }}/git/refs/tags --paginate -q '.[].ref | startswith("refs/tags/") | .ref' 2>&1
+        $success = $?
+        
+        # Check if the command was successful and returned any tags
+        if (-not $success -or [string]::IsNullOrWhiteSpace($output)) {
+            Write-Host "No tags found or error occurred when fetching tags. Skipping tag cleanup."
             exit 0  # Exit with success code
-            }
-        } catch {
-            Write-Host "Error fetching tags: $_"
-            exit 1  # Exit with error code
+        }
+        
+        # Process tags only if they exist
+        $tags = $output | ForEach-Object { $_ -replace 'refs/tags/', '' }
+        
+        if (-not $tags -or @($tags).Count -eq 0) {
+            Write-Host "No tags found to delete. Skipping tag cleanup."
+            exit 0
         }
         
         Write-Host "Found tags. Starting deletion..."
-        $tags | ForEach-Object {
-            if ($_ -ne $currentReleaseTag) {
-            Write-Host "Deleting tag: $_"
+        foreach ($tag in $tags) {
+            if ($tag -ne $currentReleaseTag) {
+            Write-Host "Deleting tag: $tag"
             try {
-                # Using properly escaped URL format and explicit headers
-                gh api repos/${{ github.repository }}/git/refs/tags/$_ -X DELETE
-                Write-Host "Successfully deleted tag: $_"
+                $deleteResult = gh api repos/${{ github.repository }}/git/refs/tags/$tag -X DELETE 2>&1
+                $deleteSuccess = $?
+                
+                if ($deleteSuccess) {
+                Write-Host "Successfully deleted tag: $tag"
+                } else {
+                Write-Host "Failed to delete tag: $tag - $deleteResult"
+                }
             } catch {
-                Write-Host "Warning: Failed to delete tag: $_"
-                Write-Host "Error details: $_"
+                Write-Host "Error deleting tag: $tag - $_"
             }
             } else {
-            Write-Host "Skipping current tag: $_"
+            Write-Host "Skipping current tag: $tag"
             }
         }
         
