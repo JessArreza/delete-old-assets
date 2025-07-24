@@ -98,23 +98,58 @@ runs:
         Write-Host "Fetching all workflow runs..."
         $currentRunId = $env:GITHUB_RUN_ID
         Write-Host "Current running workflow ID: $currentRunId"
-        $workflowRuns = gh api repos/${{ github.repository }}/actions/runs --paginate -q '.workflow_runs[] | select(.id) | .id'
-        if (-not $workflowRuns) {
-            Write-Host "No workflow runs found to delete. Skipping workflow cleanup."
-        } else {
-            Write-Host "Found workflow runs. Starting deletion..."
-            $workflowRuns | ForEach-Object {
-                if ($_ -ne $currentRunId) {
-                    Write-Host "Deleting workflow run ID: $_"
+        
+        try {
+            # Execute the gh command and capture its output and exit code
+            $output = gh api repos/${{ github.repository }}/actions/runs --paginate -q '.workflow_runs[] | select(.id) | .id' 2>&1
+            $success = $?
+            
+            # Check if the command was successful
+            if (-not $success) {
+                Write-Host "Error occurred when fetching workflow runs: $output"
+                Write-Host "Skipping workflow cleanup."
+                exit 0
+            }
+            
+            # Check if we got any workflow runs
+            if ([string]::IsNullOrWhiteSpace($output)) {
+                Write-Host "No workflow runs found to delete. Skipping workflow cleanup."
+                exit 0
+            }
+            
+            # Convert output to array and filter out empty entries
+            $workflowRuns = $output | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+            
+            if (-not $workflowRuns -or @($workflowRuns).Count -eq 0) {
+                Write-Host "No workflow runs found to delete. Skipping workflow cleanup."
+                exit 0
+            }
+            
+            Write-Host "Found $(@($workflowRuns).Count) workflow runs. Starting deletion..."
+            
+            foreach ($runId in $workflowRuns) {
+                if ($runId -ne $currentRunId) {
+                    Write-Host "Deleting workflow run ID: $runId"
                     try {
-                        gh api repos/${{ github.repository }}/actions/runs/$_ -X DELETE
-                        Write-Host "Successfully deleted workflow run: $_"
+                        $deleteResult = gh api repos/${{ github.repository }}/actions/runs/$runId -X DELETE 2>&1
+                        $deleteSuccess = $?
+                        
+                        if ($deleteSuccess) {
+                            Write-Host "Successfully deleted workflow run: $runId"
+                        } else {
+                            Write-Host "Failed to delete workflow run: $runId - $deleteResult"
+                        }
                     } catch {
-                        Write-Host "Failed to delete workflow run: $_"
+                        Write-Host "Error deleting workflow run: $runId - $_"
                     }
                 } else {
-                    Write-Host "Skipping current workflow run: $_"
+                    Write-Host "Skipping current workflow run: $runId"
                 }
             }
             Write-Host "Workflow cleanup completed. Only the current run is preserved."
+            
+        } catch {
+            Write-Host "Unexpected error during workflow cleanup: $_"
+            Write-Host "Skipping workflow cleanup."
+            exit 0
         }
